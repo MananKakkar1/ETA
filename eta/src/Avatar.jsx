@@ -2,13 +2,20 @@ import { use, useEffect, useRef, useState, useMemo } from "react";
 import { useGLTF, useFBX, useAnimations } from "@react-three/drei";
 import { LoopRepeat, LoopOnce } from "three";
 
-const DEFAULT_ANIMATION = "idle";
+const DEFAULT_ANIMATION = "gangnam";
 const TALKING_ANIMATION = "talking";
 
 
-export function Avatar({ isSpeaking = false, ...props }) {
+export function Avatar({ isSpeaking = false, externalRef, ...props }) {
   const group = useRef();
-  const { scene, animations: gltfAnimations } = useGLTF("/models/Avatar.glb");
+ 
+   const { scene, animations: gltfAnimations } = useGLTF("/models/Avatar.glb");
+  // extract incoming position and other props so we can nudge Z slightly forward
+  const { position = [0, 0, 0], ...restProps } = props;
+  const adjustedPosition = useMemo(
+    () => [position[0] ?? 0, position[1] ?? 0, (position[2] ?? 0) + 0.08],
+    [position]
+  );
 
   const idleClip = useFBX("/animation/Idle.fbx").animations?.[0];
   const talkingClip = useFBX("/animation/Talking.fbx").animations?.[0];
@@ -75,8 +82,26 @@ export function Avatar({ isSpeaking = false, ...props }) {
     return () => action.fadeOut(0.2);
   }, [actions, currentAnimation]);
 
+  // keep internal ref and also forward it to externalRef if provided
+  const setRefs = (el) => {
+    group.current = el;
+    if (externalRef) {
+      try {
+        externalRef.current = el;
+      } catch (e) {
+        // ignore if externalRef is not a mutable ref
+      }
+    }
+  };
+
   return (
-    <group ref={group} {...props} dispose={null}>
+    <group
+      ref={setRefs}
+      position={adjustedPosition}
+      rotation={[-0.5, 0, 0]}
+      {...restProps}
+      dispose={null}
+    >
       <primitive object={scene} />
     </group>
   );
