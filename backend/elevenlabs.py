@@ -1,125 +1,150 @@
 import os
-import subprocess
-import tempfile
 from pathlib import Path
-from typing import Iterator
 
 import requests
 from dotenv import load_dotenv
+import google.generativeai as genai
 
-load_dotenv(Path(__file__).with_name(".env"))
-
-API_KEY = os.environ["ELEVENLABS_API_KEY"]
-AGENT_ID = os.environ["ELEVENLABS_AGENT_ID"]
-CONVAI_BASE_URL = "https://api.elevenlabs.io/v1/convai"
-
-CREATE_ENDPOINTS = (
-    (
-        f"{CONVAI_BASE_URL}/conversation",
-        {"agent_id": AGENT_ID},
-        f"{CONVAI_BASE_URL}/conversation/{{conversation_id}}/stream",
-    ),
-    (
-        f"{CONVAI_BASE_URL}/conversations",
-        {"agent_id": AGENT_ID},
-        f"{CONVAI_BASE_URL}/conversations/{{conversation_id}}/stream",
-    ),
-    (
-        f"{CONVAI_BASE_URL}/agents/{AGENT_ID}/conversation",
-        {},
-        f"{CONVAI_BASE_URL}/conversation/{{conversation_id}}/stream",
-    ),
-    (
-        f"{CONVAI_BASE_URL}/agents/{AGENT_ID}/conversations",
-        {},
-        f"{CONVAI_BASE_URL}/conversations/{{conversation_id}}/stream",
-    ),
+DEFAULT_SYSTEM_PROMPT = (
+    "You are ETA, a concise teaching assistant who explains concepts clearly."
 )
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_VOICE_ID = "Xb7hH8MSUJpSbSDYk0k2"
+DEFAULT_ELEVEN_MODEL = "eleven_multilingual_v2"
+
+PERSONAS = {
+    "professor": {
+        "voice_env": "ELEVENLABS_VOICE_PROFESSOR",
+        "prompt_suffix": (
+            "Adopt the voice of a thoughtful professor—structured, calm, and "
+            "paced to unpack theory step by step."
+        ),
+    },
+    "study buddy": {
+        "voice_env": "ELEVENLABS_VOICE_STUDY_BUDDY",
+        "prompt_suffix": (
+            "Speak like a friendly study buddy, conversational and reassuring, "
+            "highlighting key takeaways with relatable examples."
+        ),
+    },
+    "exam coach": {
+        "voice_env": "ELEVENLABS_VOICE_EXAM_COACH",
+        "prompt_suffix": (
+            "Sound like a high-energy exam coach who motivates, keeps momentum, "
+            "and emphasises actionable tips."
+        ),
+    },
+}
 
 
-def create_conversation() -> tuple[str, str]:
-    """Create a new conversation and return the id and matching stream URL."""
-    errors: list[str] = []
+def load_env() -> None:
+    env = Path(__file__).with_name(".env")
+    if env.exists():
+        load_dotenv(env)
 
-    for url, payload, stream_template in CREATE_ENDPOINTS:
-        response = requests.post(
-            url,
-            headers={
-                "xi-api-key": API_KEY,
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            json=payload or None,
-            timeout=15,
-        )
-        if response.ok:
-            data = response.json()
-            conversation_id = (
-                data.get("conversation_id")
-                or data.get("conversation", {}).get("id")
-                or data.get("id")
-            )
-            if not conversation_id:
-                errors.append(f"{url} -> missing conversation_id in {data}")
-                continue
-            return conversation_id, stream_template.format(
-                conversation_id=conversation_id
-            )
 
-        allow = response.headers.get("Allow")
-        errors.append(
-            f"{url} -> {response.status_code}, allow={allow}, body={response.text}"
-        )
+def resolve_persona(
+    persona_name: str | None, base_prompt: str
+) -> tuple[str, str]:
+    fallback_voice = os.getenv("ELEVENLABS_VOICE_ID", DEFAULT_VOICE_ID)
+    if not persona_name:
+        return base_prompt, fallback_voice
 
-    raise RuntimeError(
-        "Unable to create ElevenLabs conversation via documented endpoints. "
-        + " | ".join(errors)
+    persona = PERSONAS.get(persona_name.lower())
+    if not persona:
+        return base_prompt, fallback_voice
+
+    persona_voice = os.getenv(persona["voice_env"], fallback_voice)
+    persona_prompt = f"{base_prompt}\n\nPersona instructions: {persona['prompt_suffix']}"
+    return persona_prompt, persona_voice
+
+
+def gemini_reply(question: str, system_prompt: str) -> str:
+    key = os.getenv("GEMINI_API_KEY")
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY missing")
+
+    model_name = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+    genai.configure(api_key=key)
+    model = genai.GenerativeModel(model_name)
+
+    result = model.generate_content(
+        [
+            {"role": "user", "parts": [system_prompt]},
+            {"role": "user", "parts": [question]},
+        ]
     )
+    text = (result.text or "").strip()
+    if not text:
+        raise RuntimeError("Gemini returned empty text")
+    return text
 
 
-def fetch_agent_audio(prompt: str) -> Iterator[bytes]:
-    """Yield audio chunks returned by the ElevenLabs agent."""
-    conversation_id, stream_url = create_conversation()
+def elevenlabs_speech(
+    text: str,
+    output: Path,
+    *,
+    voice_id: str | None = None,
+    model_id: str | None = None,
+) -> Path:
+    api_key = os.getenv("ELEVENLABS_API_KEY")
+    if not api_key:
+        raise RuntimeError("ELEVENLABS_API_KEY missing")
 
-    with requests.post(
-        stream_url,
+    resolved_voice = voice_id or os.getenv("ELEVENLABS_VOICE_ID", DEFAULT_VOICE_ID)
+    resolved_model = model_id or os.getenv("ELEVENLABS_MODEL_ID", DEFAULT_ELEVEN_MODEL)
+
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{resolved_voice}/stream"
+    response = requests.post(
+        url,
         headers={
-            "xi-api-key": API_KEY,
+            "xi-api-key": api_key,
             "Content-Type": "application/json",
             "Accept": "audio/mpeg",
         },
-        json={
-            "agent_id": AGENT_ID,
-            "conversation_id": conversation_id,
-            "input": prompt,
-            "modalities": ["audio"],
-        },
+        json={"text": text, "model_id": resolved_model},
         stream=True,
         timeout=60,
-    ) as response:
-        if response.status_code >= 400:
-            allow = response.headers.get("Allow")
-            raise RuntimeError(
-                "Failed to stream audio "
-                f"({response.status_code}, allow={allow}): {response.text}"
-            )
-        for chunk in response.iter_content(chunk_size=4096):
+    )
+    response.raise_for_status()
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("wb") as fh:
+        for chunk in response.iter_content(8192):
             if chunk:
-                yield chunk
+                fh.write(chunk)
+    return output
 
 
-def speak_with_agent(prompt: str) -> None:
-    """Send text to the ElevenLabs agent, save the reply, and play it."""
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
-        for chunk in fetch_agent_audio(prompt):
-            tmp_file.write(chunk)
-        temp_path = tmp_file.name
+def prompt_for_persona(default: str | None) -> str | None:
+    if default:
+        return default
 
-    try:
-        subprocess.run(["afplay", temp_path], check=True)
-    finally:
-        os.remove(temp_path)
+    print("Available personas: Professor, Study Buddy, Exam Coach")
+    choice = input("Choose a persona (press enter for default voice): ").strip()
+    return choice or None
+
+
+def main() -> None:
+    load_env()
+
+    question = os.getenv("QUESTION") or input("Enter your question: ").strip()
+    if not question:
+        raise RuntimeError("Need a question")
+
+    base_prompt = os.getenv("SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT)
+    persona_choice = prompt_for_persona(os.getenv("ELEVENLABS_PERSONA"))
+    persona_prompt, persona_voice = resolve_persona(persona_choice, base_prompt)
+
+    print("Generating answer...")
+    answer = gemini_reply(question, persona_prompt)
+
+    print("Generating audio...")
+    audio_path = Path(os.getenv("ELEVENLABS_OUTPUT_FILE", "elevenlabs_response.mp3"))
+    elevenlabs_speech(answer, audio_path, voice_id=persona_voice)
+
+    print(f"Synthesized audio saved to {audio_path.resolve()}")
 
 
 if __name__ == "__main__":
-    speak_with_agent("Teach me about the theory of relativity in simple terms.")
+    main()
