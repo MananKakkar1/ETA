@@ -63,6 +63,23 @@ def generate_new_user(eta_id, upload_date, name, email):
         return jsonify({"message": "User stored successfully"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@app.route("/get-user/<eta_id>", methods=["GET"])
+def get_user(eta_id):
+    try:
+        response = table.get_item(
+            Key={
+                'ElectronicTeachingAssistantMaterialID': eta_id
+            }
+        )
+        item = response.get('Item')
+        if not item:
+            return jsonify({"error": "User not found"}), 404
+        
+        return jsonify(item), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     # How to use the Gemini client to generate content.
