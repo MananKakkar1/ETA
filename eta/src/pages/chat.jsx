@@ -21,19 +21,29 @@ const DUMMY_THREADS = [
     summary: "Mock questions · Rapid recall · Motivation bursts",
   },
   {
-    id: "exam-prep",
-    title: "Exam Coaching",
-    summary: "Mock questions · Rapid recall · Motivation bursts",
+    id: "quantum-mechanics",
+    title: "Quantum Mechanics",
+    summary: "Wave functions · Uncertainty principle · Schrödinger equation",
   },
   {
-    id: "exam-prep",
-    title: "Exam Coaching",
-    summary: "Mock questions · Rapid recall · Motivation bursts",
+    id: "linear-algebra",
+    title: "Linear Algebra",
+    summary: "Matrices · Eigenvalues · Vector spaces",
   },
   {
-    id: "exam-prep",
-    title: "Exam Coaching",
-    summary: "Mock questions · Rapid recall · Motivation bursts",
+    id: "thermodynamics",
+    title: "Thermodynamics",
+    summary: "Heat engines · Entropy · Laws of thermodynamics",
+  },
+  {
+    id: "statistics",
+    title: "Statistics & Probability",
+    summary: "Distributions · Hypothesis testing · Bayesian inference",
+  },
+  {
+    id: "organic-chemistry",
+    title: "Organic Chemistry",
+    summary: "Functional groups · Reaction mechanisms · Stereochemistry",
   },
 ];
 
@@ -86,7 +96,91 @@ function PersonaTabs({ activePersona, onSelect }) {
   );
 }
 
+function ThreadsModal({ isOpen, onClose, threads, onSelectThread }) {
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = "hidden"; // Prevent background scroll
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "unset";
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const handleThreadSelect = (threadId) => {
+    onSelectThread(threadId);
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>All Sessions</h2>
+          <button
+            type="button"
+            className="modal-close"
+            onClick={onClose}
+            aria-label="Close modal"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div className="threads-grid">
+            {threads.map((thread) => (
+              <button
+                key={thread.id}
+                type="button"
+                className="thread-modal-card"
+                onClick={() => handleThreadSelect(thread.id)}
+              >
+                <h3>{thread.title}</h3>
+                <p>{thread.summary}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button
+            type="button"
+            className="cta cta--secondary"
+            onClick={onClose}
+          >
+            Close
+          </button>
+          <button type="button" className="cta cta--primary">
+            New Session
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChatSidebar({ onSelectThread, personaLabel, isSpeaking }) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const openModal = () => {
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+  };
+
   return (
     <aside className="chat__sidebar">
       <div className="chat__avatar-shell">
@@ -95,13 +189,20 @@ function ChatSidebar({ onSelectThread, personaLabel, isSpeaking }) {
       <div className="chat__sessions-card">
         <header className="chat__sessions-header">
           <h2>Sessions</h2>
+          <button
+            type="button"
+            className="chat__new-session"
+            onClick={openModal}
+          >
+            See all
+          </button>
           <button type="button" className="chat__new-session">
             New Session
           </button>
         </header>
         <div className="chat__thread-list-wrapper">
           <ul className="chat__thread-list">
-            {DUMMY_THREADS.map((thread) => (
+            {DUMMY_THREADS.slice(0, 6).map((thread) => (
               <li key={thread.id}>
                 <button
                   type="button"
@@ -116,6 +217,13 @@ function ChatSidebar({ onSelectThread, personaLabel, isSpeaking }) {
           </ul>
         </div>
       </div>
+
+      <ThreadsModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        threads={DUMMY_THREADS}
+        onSelectThread={onSelectThread}
+      />
     </aside>
   );
 }
@@ -184,7 +292,11 @@ function AvatarPreview({ isSpeaking, personaLabel }) {
           <ambientLight intensity={0.6} />
           <directionalLight position={[2.5, 4, 3]} intensity={0.9} />
           <Avatar position={[0, -1.05, 0]} isSpeaking={isSpeaking} />
-          <OrbitControls enablePan={false} enableZoom={false} enableRotate={false} />
+          <OrbitControls
+            enablePan={false}
+            enableZoom={false}
+            enableRotate={false}
+          />
           <Environment preset="city" />
         </Canvas>
       </div>
@@ -232,7 +344,7 @@ function Chat() {
         role: "assistant",
         content: `${
           personaDetails.displayLabel
-        }: I’ll log this question and fetch a response shortly with a ${personaDetails.summary.toLowerCase()} tone.`,
+        }: I'll log this question and fetch a response shortly with a ${personaDetails.summary.toLowerCase()} tone.`,
       },
     ]);
     setInput("");
