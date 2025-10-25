@@ -12,39 +12,77 @@ load_dotenv(Path(__file__).with_name(".env"))
 API_KEY = os.environ["ELEVENLABS_API_KEY"]
 AGENT_ID = os.environ["ELEVENLABS_AGENT_ID"]
 CONVAI_BASE_URL = "https://api.elevenlabs.io/v1/convai"
-CONVAI_CREATE_URL = f"{CONVAI_BASE_URL}/conversation"
-CONVAI_STREAM_URL = (
-    f"{CONVAI_BASE_URL}/conversation/{{conversation_id}}/stream"
+
+CREATE_ENDPOINTS = (
+    (
+        f"{CONVAI_BASE_URL}/conversation",
+        {"agent_id": AGENT_ID},
+        f"{CONVAI_BASE_URL}/conversation/{{conversation_id}}/stream",
+    ),
+    (
+        f"{CONVAI_BASE_URL}/conversations",
+        {"agent_id": AGENT_ID},
+        f"{CONVAI_BASE_URL}/conversations/{{conversation_id}}/stream",
+    ),
+    (
+        f"{CONVAI_BASE_URL}/agents/{AGENT_ID}/conversation",
+        {},
+        f"{CONVAI_BASE_URL}/conversation/{{conversation_id}}/stream",
+    ),
+    (
+        f"{CONVAI_BASE_URL}/agents/{AGENT_ID}/conversations",
+        {},
+        f"{CONVAI_BASE_URL}/conversations/{{conversation_id}}/stream",
+    ),
 )
 
 
-def create_conversation() -> str:
-    """Create a new conversation for the configured agent."""
-    response = requests.post(
-        CONVAI_CREATE_URL,
-        headers={
-            "xi-api-key": API_KEY,
-            "Content-Type": "application/json",
-        },
-        json={"agent_id": AGENT_ID},
-        timeout=15,
-    )
-    if response.status_code >= 400:
-        allow = response.headers.get("Allow")
-        raise RuntimeError(
-            "Failed to create conversation "
-            f"({response.status_code}, allow={allow}): {response.text}"
+def create_conversation() -> tuple[str, str]:
+    """Create a new conversation and return the id and matching stream URL."""
+    errors: list[str] = []
+
+    for url, payload, stream_template in CREATE_ENDPOINTS:
+        response = requests.post(
+            url,
+            headers={
+                "xi-api-key": API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json=payload or None,
+            timeout=15,
         )
-    data = response.json()
-    return data["conversation_id"]
+        if response.ok:
+            data = response.json()
+            conversation_id = (
+                data.get("conversation_id")
+                or data.get("conversation", {}).get("id")
+                or data.get("id")
+            )
+            if not conversation_id:
+                errors.append(f"{url} -> missing conversation_id in {data}")
+                continue
+            return conversation_id, stream_template.format(
+                conversation_id=conversation_id
+            )
+
+        allow = response.headers.get("Allow")
+        errors.append(
+            f"{url} -> {response.status_code}, allow={allow}, body={response.text}"
+        )
+
+    raise RuntimeError(
+        "Unable to create ElevenLabs conversation via documented endpoints. "
+        + " | ".join(errors)
+    )
 
 
 def fetch_agent_audio(prompt: str) -> Iterator[bytes]:
     """Yield audio chunks returned by the ElevenLabs agent."""
-    conversation_id = create_conversation()
+    conversation_id, stream_url = create_conversation()
 
     with requests.post(
-        CONVAI_STREAM_URL.format(conversation_id=conversation_id),
+        stream_url,
         headers={
             "xi-api-key": API_KEY,
             "Content-Type": "application/json",
