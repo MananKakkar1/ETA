@@ -333,9 +333,9 @@ function App() {
       <p className="read-the-docs">
         Click on the Vite and React logos to learn more
       </p>
-      <LoginButton />
-      <LogoutButton />
-      <Profile />
+
+      {/* LoginButton / LogoutButton / Profile were removed because they were not defined.
+          If you need them, import or define the components and re-add here. */}
     </>
   );
 }
