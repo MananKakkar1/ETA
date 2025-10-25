@@ -18,6 +18,7 @@ createRoot(document.getElementById("root")).render(
       clientId="Rgq8OF7zgiCBvbpAN4oa3CDmRjouNxA4"
       authorizationParams={{
         redirect_uri: `${window.location.origin}/chat`,
+        audience: "https://dev-eta.ca.auth0.com/api/v2/",
         scope: "openid profile email",
       }}
       onRedirectCallback={onRedirectCallback}
