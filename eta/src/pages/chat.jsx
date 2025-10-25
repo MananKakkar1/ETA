@@ -169,7 +169,7 @@ function AvatarPreview({ isSpeaking, personaLabel }) {
           <ambientLight intensity={0.6} />
           <directionalLight position={[2.5, 4, 3]} intensity={0.9} />
           <Avatar position={[0, -1.05, 0]} isSpeaking={isSpeaking} />
-          <OrbitControls enablePan={false} enableZoom={false} />
+          <OrbitControls enablePan={false} enableZoom={false} enableRotate={false} />
           <Environment preset="city" />
         </Canvas>
       </div>
