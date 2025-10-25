@@ -20,6 +20,21 @@ const DUMMY_THREADS = [
     title: "Exam Coaching",
     summary: "Mock questions · Rapid recall · Motivation bursts",
   },
+  {
+    id: "exam-prep",
+    title: "Exam Coaching",
+    summary: "Mock questions · Rapid recall · Motivation bursts",
+  },
+  {
+    id: "exam-prep",
+    title: "Exam Coaching",
+    summary: "Mock questions · Rapid recall · Motivation bursts",
+  },
+  {
+    id: "exam-prep",
+    title: "Exam Coaching",
+    summary: "Mock questions · Rapid recall · Motivation bursts",
+  },
 ];
 
 const PERSONAS = [
@@ -84,20 +99,22 @@ function ChatSidebar({ onSelectThread, personaLabel, isSpeaking }) {
             New Session
           </button>
         </header>
-        <ul className="chat__thread-list">
-          {DUMMY_THREADS.map((thread) => (
-            <li key={thread.id}>
-              <button
-                type="button"
-                className="chat__thread-card"
-                onClick={() => onSelectThread(thread.id)}
-              >
-                <h3>{thread.title}</h3>
-                <p>{thread.summary}</p>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="chat__thread-list-wrapper">
+          <ul className="chat__thread-list">
+            {DUMMY_THREADS.map((thread) => (
+              <li key={thread.id}>
+                <button
+                  type="button"
+                  className="chat__thread-card"
+                  onClick={() => onSelectThread(thread.id)}
+                >
+                  <h3>{thread.title}</h3>
+                  <p>{thread.summary}</p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </aside>
   );
@@ -107,9 +124,7 @@ function MessageBubble({ role, content }) {
   const isAgent = role === "assistant";
   return (
     <div className={`chat__bubble${isAgent ? " chat__bubble--agent" : ""}`}>
-      <div className="chat__bubble-meta">
-        {isAgent ? "ETA" : "You"}
-      </div>
+      <div className="chat__bubble-meta">{isAgent ? "ETA" : "You"}</div>
       <p>{content}</p>
     </div>
   );
@@ -215,7 +230,9 @@ function Chat() {
       { role: "user", content: input.trim() },
       {
         role: "assistant",
-        content: `${personaDetails.displayLabel}: I’ll log this question and fetch a response shortly with a ${personaDetails.summary.toLowerCase()} tone.`,
+        content: `${
+          personaDetails.displayLabel
+        }: I’ll log this question and fetch a response shortly with a ${personaDetails.summary.toLowerCase()} tone.`,
       },
     ]);
     setInput("");
@@ -245,8 +262,8 @@ function Chat() {
               Persona: <strong>{personaDetails.displayLabel}</strong>
             </p>
             <p className="chat__tone-line">
-              Tone: {personaDetails.summary}. Ask a question to keep the
-              session moving.
+              Tone: {personaDetails.summary}. Ask a question to keep the session
+              moving.
             </p>
           </div>
           <PersonaTabs activePersona={persona} onSelect={setPersona} />

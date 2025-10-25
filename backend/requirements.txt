@@ -1,9 +1,10 @@
 Flask==2.0.3
 elevenlabs
 python-dotenv>=0.19.2
-authlib>=1.0
 requests>=2.27.1
 chromadb>=0.3.21
 google-genai>=0.2.0
 boto3>=1.24.28
 awscli>=1.27.0
+datetime>=4.3
+uuid>=1.30.0
