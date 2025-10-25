@@ -80,7 +80,21 @@ def get_user(eta_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
+@app.route("/upload-context", methods=["POST"])
+def upload_context():
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "No file part in the request"}), 400
+        file = request.files['file']
+        eta_id = request.form.get("etaId")
+        if file.filename == '' or not eta_id:
+            return jsonify({"error": "No selected file"}), 400
+        if not file.endswith('.pdf'):
+            return jsonify({"error": "Unsupported file type"}), 400
+        pdf_content = file.read()
+        pdf_text = extract_text_from_pdf(pdf_content)
+        if not pdf_text.strip():
+            return jsonify({"error": "Failed to extract text from PDF"}), 500
 if __name__ == "__main__":
     # How to use the Gemini client to generate content.
     
