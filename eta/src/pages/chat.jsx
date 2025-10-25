@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import * as THREE from "three";
 import { OrbitControls, Environment } from "@react-three/drei";
 import { Avatar } from "../Avatar.jsx";
 import "./chat.css";
@@ -176,14 +177,50 @@ function Composer({ input, onChange, onSend, disabled }) {
   );
 }
 
+// Camera that smoothly follows a target's X position and looks toward the target
+function CameraFollow({ targetRef, lerp = 0.08, lookOffset = [0, 0.9, 0] }) {
+  const { camera } = useThree();
+  const tmpVec = useRef(new THREE.Vector3());
+
+  useFrame(() => {
+    if (!targetRef?.current) return;
+
+    // get target world position
+    targetRef.current.getWorldPosition(tmpVec.current);
+    const targetPos = tmpVec.current;
+
+    // Smoothly interpolate camera X toward target X
+    const desiredX = targetPos.x;
+    camera.position.x += (desiredX - camera.position.x) * lerp;
+
+    // Optionally keep the existing camera Y/Z (or adjust if you want)
+    // Keep camera Y/Z as configured on Canvas; only follow X by default.
+
+    // Make camera look at the target (with offset so head is centered)
+    camera.lookAt(
+      targetPos.x + lookOffset[0],
+      targetPos.y + lookOffset[1],
+      targetPos.z + lookOffset[2]
+    );
+  });
+
+  return null;
+}
+
 function AvatarPreview({ isSpeaking, personaLabel }) {
+  // ref to pass into Avatar so CameraFollow can track it
+  const avatarRef = useRef();
+
   return (
     <div className="chat__avatar-card">
       <div className="chat__avatar-wrapper">
         <Canvas camera={{ position: [0, 1.4, 2.2], fov: 38 }}>
           <ambientLight intensity={0.6} />
           <directionalLight position={[2.5, 4, 3]} intensity={0.9} />
-          <Avatar position={[0, -1.05, 0]} isSpeaking={isSpeaking} />
+          {/* pass externalRef to Avatar so we can read its world position */}
+          <Avatar externalRef={avatarRef} position={[0, -1.05, 0]} isSpeaking={isSpeaking} />
+          {/* CameraFollow will only move camera.x (smooth) and keep other axes stable */}
+          <CameraFollow targetRef={avatarRef} lerp={0.08} lookOffset={[0, 0.9, 0]} />
           <OrbitControls enablePan={false} enableZoom={false} enableRotate={false} />
           <Environment preset="city" />
         </Canvas>
