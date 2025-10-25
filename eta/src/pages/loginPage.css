@@ -1,6 +1,6 @@
 .auth {
   width: min(420px, 90vw);
-  margin: 0 auto;
+  margin: auto;
   padding: 3rem 2.5rem;
   border-radius: 1.75rem;
   background: rgba(13, 22, 37, 0.85);
@@ -9,6 +9,8 @@
   display: flex;
   flex-direction: column;
   gap: 1.75rem;
+  max-height: 100%;
+  overflow: auto;
 }
 
 .auth__title {
