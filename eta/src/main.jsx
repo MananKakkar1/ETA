@@ -26,6 +26,8 @@ createRoot(document.getElementById("root")).render(
       clientId="Rgq8OF7zgiCBvbpAN4oa3CDmRjouNxA4"
       authorizationParams={{
         redirect_uri: window.location.origin,
+        audience: "https://dev-eta.ca.auth0.com/api/v2/",
+        scope: "open_id profile email",
       }}
     >
       <RouterProvider router={router} />
