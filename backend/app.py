@@ -219,8 +219,8 @@ def upload_context():
             prompt = (
                 "Provide a detailed yet concise summary that preserves every key "
                 "detail, definition, and enumerated point from the provided PDF "
-                "content. Make sure to include all important information without omitting any context." \
-                "Summarize in a manner that is concise and doesnt use any bullet points or decorative formatting. " \
+                "content. Make sure to include all important information without omitting any context."
+                "Summarize in a manner that is concise and doesnt use any bullet points or decorative formatting. "
                 "The summary should be in plain text format with no spaces or newlines."
             )
             response = client.models.generate_content(
@@ -337,7 +337,7 @@ def create_chat_thread():
         chats = user.get("Items", [])[0].get("ChatHistory", [])
         if not chats:
             return jsonify({"error": "No chat history found for user"}), 404
-        new_thread = {'ChatID': len(chats), 'User': [], 'Assistant': []}
+        new_thread = {'ChatID': len(chats), 'Messages': []}
         chats.append(new_thread)
         table.update_item(
             Key={
@@ -420,15 +420,11 @@ def add_message_to_thread():
             assistant_message = "I'm sorry, I couldn't process your request at the moment."
         for thread in chat_history:
             if str(thread.get("ChatID")) == chat_id:
-                thread['User'].append({
-                    "message": message,
-                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                })
-                thread['Assistant'].append({
-                    "message": assistant_message,
-                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                })
+                thread.append(('User', message))
+                thread.append(('Assistant', assistant_message))
                 break
+        if len(thread) > 20:
+            thread = thread[-20:]
         else:
             return jsonify({"error": "Chat thread not found"}), 404
 
@@ -487,14 +483,10 @@ def generate_practice_problems():
             assistant_message = "I'm sorry, I couldn't process your request at the moment."
         for thread in chat_history:
             if str(thread.get("ChatID")) == chat_id:
-                thread['User'].append({
-                    "message": message,
-                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                })
-                thread['Assistant'].append({
-                    "message": assistant_message,
-                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                })
+                messages = thread.get("Messages", [])
+                if not messages:
+                    []
+                messages.append(('Assistant', assistant_message))
                 break
         else:
             return jsonify({"error": "Chat thread not found"}), 404
@@ -547,35 +539,55 @@ def generate_weekly_plan():
                       "Break down the content into manageable sections and suggest daily study goals, including time allocations and key focus areas."
                       "Ensure that the plan is realistic and adaptable to the user's schedule, and ensure that the plan remains clear and concise, without losing details.")
             history = ""
-            for u, a in zip(thread['User'], thread['Assistant']):
-                history += f"User: {u['message']}\nAssistant: {a['message']}\n"
-
+            messages = thread.get("Messages", [])
+            for role, msg in messages:
+                history += f"{role}: {msg}\n"
+            context_string = ""
+            for ctx in context:
+                context_string += f"{ctx.get('summary', '')}\n"
+            prompt += f"\n\nContext:\n{context_string}"
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=[
                     {
                         "text": prompt,
-                        "text": chat_history
+                        "text": history,
+                        "text": context_string,
                     }
                 ]
             )
+            candidate = response.candidates[0]
+            assistant_message = "".join(
+                part.text for part in candidate.content.parts).strip()
+        except Exception as exc:
+            assistant_message = "I'm sorry, I couldn't process your request at the moment."
+        messages.append(('Assistant', assistant_message))
+        thread.Messages = messages
+        table.update_item(
+            Key={
+                PRIMARY_KEY: eta_id,
+                'UploadDate': items[0].get("UploadDate"),
+            },
+            UpdateExpression="SET ChatHistory = :chats",
+            ExpressionAttributeValues={":chats": chat_history}
+        )
+        return jsonify({"message": "Weekly plan generated successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-@app.route("/voice-response", methods=["POST"])
-def get_voice_response() -> bytes:
-    data = request.get_json()
-    question = data.get("question")
-    persona = data.get("persona")
-    if not question or not persona:
-        return jsonify({"error": "Missing question or persona"}), 400
+
+def get_voice_response(voice_id: str, question: str, persona: str) -> bytes:
+    api_key = env.get("ELEVENLABS_API_KEY")
     module = ElevenLabsModule()
     module.load_env()
     env = Path(__file__).with_name(".env")
     if env.exists():
         load_dotenv(env)
-    personaPrompt, personaResolved = module.resolve_persona(persona, os.getenv("SYSTEM_PROMPT"))
-    ans = module.gemini_reply(question, system_prompt=personaPrompt)
-    voiceBytes = module.elevenlabs_speech(ans, output=Path("output.mp3"), voice_id=personaResolved)
-    return voiceBytes
+    module.resolve_persona(persona, os.getenv(
+        "SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
+    module.gemini_reply(question, system_prompt="You are a helpful assistant.")
+    module.elevenlabs_speech(question, output=Path(
+        "output.mp3"), voice_id=voice_id)
 
 
 if __name__ == "__main__":
