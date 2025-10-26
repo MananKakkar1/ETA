@@ -718,7 +718,7 @@ def get_voice_response() -> bytes:
     #     load_dotenv(env)
     personaPrompt, personaResolved = module.resolve_persona(
         persona, os.getenv("SYSTEM_PROMPT"))
-    ans = module.gemini_reply(question, system_prompt=personaPrompt)
+    ans = module.gemini_reply(question, system_prompt=personaPrompt+history+context_string)
     animation = module.gemini_reply_emotion(ans)
     voiceBytes = module.elevenlabs_speech(
         ans, output=Path("output.mp3"), voice_id=personaResolved)
