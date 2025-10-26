@@ -188,6 +188,7 @@ function ChatSidebar({
   personaLabel,
   isSpeaking,
   isCreatingThread,
+  animationOverride,
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -205,6 +206,7 @@ function ChatSidebar({
         <AvatarPreview
           isSpeaking={isSpeaking}
           personaLabel={personaLabel}
+          animationOverride={animationOverride}
         />
       </div>
       <div className="chat__sessions-card">
@@ -457,7 +459,7 @@ function CameraFollow({ targetRef, lerp = 0.08, lookOffset = [0, 0.9, 0] }) {
   return null;
 }
 
-function AvatarPreview({ isSpeaking, personaLabel }) {
+function AvatarPreview({ isSpeaking, personaLabel, animationOverride }) {
   // ref to pass into Avatar so CameraFollow can track it
   const avatarRef = useRef();
 
@@ -472,6 +474,7 @@ function AvatarPreview({ isSpeaking, personaLabel }) {
             externalRef={avatarRef}
             position={[0, -1.05, 0]}
             isSpeaking={isSpeaking}
+            animationOverride={animationOverride}
           />
           {/* CameraFollow will only move camera.x (smooth) and keep other axes stable */}
           <CameraFollow
@@ -694,6 +697,7 @@ function Chat() {
   const ensuredInitialThreadRef = useRef(false);
   const [selectedAction, setSelectedAction] = useState('send');
   const [voiceFallback, setVoiceFallback] = useState(null);
+  const [animationOverride, setAnimationOverride] = useState(null);
 
   const personaDetails = useMemo(
     () => PERSONA_MAP[persona] ?? PERSONA_MAP['professor'],
@@ -908,25 +912,25 @@ function Chat() {
     return created?.id ?? null;
   }, [activeThreadId, handleCreateThread]);
 
-  useEffect(() => {
-    if (
-      !etaProfile?.etaId ||
-      isFetchingThreads ||
-      isCreatingThread ||
-      threads.length > 0 ||
-      ensuredInitialThreadRef.current
-    ) {
-      return;
-    }
-    ensuredInitialThreadRef.current = true;
-    handleCreateThread({ activate: true });
-  }, [
-    etaProfile?.etaId,
-    isFetchingThreads,
-    isCreatingThread,
-    threads.length,
-    handleCreateThread,
-  ]);
+  // useEffect(() => {
+  //   if (
+  //     !etaProfile?.etaId ||
+  //     isFetchingThreads ||
+  //     isCreatingThread ||
+  //     threads.length > 0 ||
+  //     ensuredInitialThreadRef.current
+  //   ) {
+  //     return;
+  //   }
+  //   ensuredInitialThreadRef.current = true;
+  //   handleCreateThread({ activate: true });
+  // }, [
+  //   etaProfile?.etaId,
+  //   isFetchingThreads,
+  //   isCreatingThread,
+  //   threads.length,
+  //   handleCreateThread,
+  // ]);
 
   const handleSelectThread = useCallback(
     async (threadId) => {
@@ -1065,6 +1069,7 @@ function Chat() {
     }
     setVoiceFallback(null);
     setIsAvatarSpeaking(false);
+    setAnimationOverride(null);
   }, [voiceFallback]);
 
   const handleVoiceFallbackPlay = useCallback(
@@ -1072,6 +1077,8 @@ function Chat() {
       const element = event.currentTarget;
       audioRef.current = element;
       setIsAvatarSpeaking(true);
+      const anim = element.getAttribute('data-animation') || 'talking';
+      setAnimationOverride(anim);
       voiceCleanupRef.current = () => {
         try {
           element.pause();
@@ -1323,7 +1330,7 @@ function Chat() {
         setIsAvatarSpeaking(false);
       };
 
-      setVoiceFallback({ audioUrl, release });
+      setVoiceFallback({ audioUrl, release, animation: 'talking' });
       voiceCleanupRef.current = null;
       setSelectedAction('voice');
       setExpandedMessage({
@@ -1451,6 +1458,7 @@ function Chat() {
         personaLabel={personaDetails.displayLabel}
         isSpeaking={isAvatarSpeaking}
         isCreatingThread={isCreatingThread}
+        animationOverride={animationOverride}
       />
       <section className="chat__panel">
         <header className="chat__header">
@@ -1499,6 +1507,7 @@ function Chat() {
               onPlay={handleVoiceFallbackPlay}
               onPause={() => setIsAvatarSpeaking(false)}
               onEnded={clearVoiceFallback}
+              data-animation={voiceFallback?.animation || 'talking'}
             />
             <button
               type="button"

@@ -933,7 +933,8 @@ def get_voice_response() -> bytes:
     item, _ = _fetch_latest_user_item(eta_id)
     if not item:
         return jsonify({"error": "User not found"}), 404
-
+    
+    item, upload_date = _fetch_latest_user_item(eta_id)
     chat_history = _normalize_chat_history(item.get("ChatHistory", []))
     thread = next(
         (t for t in chat_history if str(t.get("ChatID")) == chat_id), None)
@@ -969,6 +970,22 @@ def get_voice_response() -> bytes:
 
     ans = module.gemini_reply(question, system_prompt=system_prompt)
     animation = module.gemini_reply_emotion(ans)
+    table.update_item(
+        Key={
+            PRIMARY_KEY: eta_id,
+            "UploadDate": upload_date,
+        },
+        UpdateExpression="SET #ctx = list_append(if_not_exists(#ctx, :empty), :new)",
+        ExpressionAttributeNames={"#ctx": "Context"},
+        ExpressionAttributeValues={
+            ":empty": [],
+            ":new": [{
+                "type": "voice_reply",
+                "summary": ans,
+                "uploaded_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }],
+        },
+    )
     voiceBytes = module.elevenlabs_speech(
         ans, voice_id=persona_voice)
     response = make_response(voiceBytes)

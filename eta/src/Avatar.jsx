@@ -6,10 +6,10 @@ const DEFAULT_ANIMATION = "gangnam";
 const TALKING_ANIMATION = "talking";
 
 
-export function Avatar({ isSpeaking = false, externalRef, ...props }) {
+export function Avatar({ isSpeaking = false, externalRef, animationOverride, ...props }) {
   const group = useRef();
- 
-   const { scene, animations: gltfAnimations } = useGLTF("/models/Avatar.glb");
+
+  const { scene, animations: gltfAnimations } = useGLTF("/models/Avatar.glb");
   // extract incoming position and other props so we can nudge Z slightly forward
   const { position = [0, 0, 0], ...restProps } = props;
   const adjustedPosition = useMemo(
@@ -54,6 +54,10 @@ export function Avatar({ isSpeaking = false, externalRef, ...props }) {
     // Only switch to talking if we're currently idle.
     // Only return to idle if we were talking. This prevents typing
     // from overriding other animations (e.g. dancing).
+    if (animationOverride) {
+      setCurrentAnimation(animationOverride);
+      return;
+    }
     if (isSpeaking) {
       if (currentAnimation === DEFAULT_ANIMATION) {
         setCurrentAnimation(TALKING_ANIMATION);
@@ -63,7 +67,7 @@ export function Avatar({ isSpeaking = false, externalRef, ...props }) {
         setCurrentAnimation(DEFAULT_ANIMATION);
       }
     }
-  }, [isSpeaking, currentAnimation]);
+  }, [isSpeaking, currentAnimation, animationOverride]);
 
   useEffect(() => {
     const action =
@@ -76,7 +80,7 @@ export function Avatar({ isSpeaking = false, externalRef, ...props }) {
     }
 
     action.enabled = true;
-    if (currentAnimation === DEFAULT_ANIMATION) {
+    if (currentAnimation === DEFAULT_ANIMATION || currentAnimation === TALKING_ANIMATION) {
       action.setLoop(LoopRepeat, Infinity);
     } else {
       action.setLoop(LoopOnce, 0);
