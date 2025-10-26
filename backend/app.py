@@ -383,6 +383,7 @@ def get_voice_response() -> bytes:
     data = request.get_json()
     question = data.get("question")
     persona = data.get("persona")
+    # TODO: Give all context before asking for a reply.
     if not question or not persona:
         return jsonify({"error": "Missing question or persona"}), 400
     module = ElevenLabsModule()
@@ -392,8 +393,9 @@ def get_voice_response() -> bytes:
         load_dotenv(env)
     personaPrompt, personaResolved = module.resolve_persona(persona, os.getenv("SYSTEM_PROMPT"))
     ans = module.gemini_reply(question, system_prompt=personaPrompt)
+    animation = module.gemini_reply_emotion(ans)
     voiceBytes = module.elevenlabs_speech(ans, output=Path("output.mp3"), voice_id=personaResolved)
-    return voiceBytes
+    return voiceBytes, animation
 
 
 if __name__ == "__main__":

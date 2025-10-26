@@ -82,6 +82,31 @@ class ElevenLabsModule:
             raise RuntimeError("Gemini returned empty text")
         return text
 
+    def gemini_reply_emotion(self, answer: str) -> str:
+        key = os.getenv("GEMINI_API_KEY")
+        if not key:
+            raise RuntimeError("GEMINI_API_KEY missing")
+
+        model_name = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+        genai.configure(api_key=key)
+        model = genai.GenerativeModel(model_name)
+
+        prompt = (
+            "Analyze the emotional tone of the following text and respond with a single word "
+            "that best describes the overall emotion/animation. You can only choose from Dancing, "
+            "Dying, Defeated, GangamStyle, Idle, Taunt, Talking:\n\n"
+            f"{answer}"
+        )
+
+        result = model.generate_content(
+            [
+                {"role": "user", "parts": [prompt]},
+            ]
+        )
+        emotion = (result.text or "").strip().lower()
+        if not emotion:
+            raise RuntimeError("Gemini returned empty emotion")
+        return emotion
 
     def elevenlabs_speech(
         self,
