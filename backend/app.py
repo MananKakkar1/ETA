@@ -2,6 +2,8 @@ import io
 import datetime
 import uuid
 from os import environ as env
+import os
+from anyio import Path
 import pypdf
 import PyPDF2
 import boto3
@@ -9,7 +11,7 @@ from boto3.dynamodb.conditions import Key
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import find_dotenv, load_dotenv
-
+from elevenlabs import ElevenLabsModule
 from google import genai
 
 ENV_FILE = find_dotenv()
@@ -217,7 +219,9 @@ def upload_context():
             prompt = (
                 "Provide a detailed yet concise summary that preserves every key "
                 "detail, definition, and enumerated point from the provided PDF "
-                "content."
+                "content. Make sure to include all important information without omitting any context." \
+                "Summarize in a manner that is concise and doesnt use any bullet points or decorative formatting. " \
+                "The summary should be in plain text format with no spaces or newlines."
             )
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
@@ -284,7 +288,7 @@ def upload_context():
             "message": "Context uploaded successfully",
             "eta_id": eta_id,
             "upload_date": upload_date,
-            "debug": debug,
+            # "debug": debug,
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -556,6 +560,17 @@ def generate_weekly_plan():
                 ]
             )
 
+
+def get_voice_response(voice_id: str, question: str, persona: str) -> bytes:
+    api_key = env.get("ELEVENLABS_API_KEY")
+    module = ElevenLabsModule()
+    module.load_env()
+    env = Path(__file__).with_name(".env")
+    if env.exists():
+        load_dotenv(env)
+    module.resolve_persona(persona, os.getenv("SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
+    module.gemini_reply(question, system_prompt="You are a helpful assistant.")
+    module.elevenlabs_speech(question, output=Path("output.mp3"), voice_id=voice_id)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(env.get("PORT", 3000)))
