@@ -32,8 +32,7 @@ function TopBar() {
   return (
     <header className="topbar">
       <Link to="/chat" className="topbar__logo">
-        <span className="logo-mark">E</span>
-        <span className="logo-text">TA Nexus</span>
+        <span className="logo-text">ETA</span>
       </Link>
       <div className="topbar__actions">
         {isAuthenticated ? (
