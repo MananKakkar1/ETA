@@ -86,11 +86,10 @@ class ElevenLabsModule:
     def elevenlabs_speech(
         self,
         text: str,
-        output: Path,
         *,
         voice_id: str | None = None,
         model_id: str | None = None,
-    ) -> Path:
+    ) -> bytes:
         api_key = os.getenv("ELEVENLABS_API_KEY")
         if not api_key:
             raise RuntimeError("ELEVENLABS_API_KEY missing")
@@ -112,12 +111,11 @@ class ElevenLabsModule:
         )
         response.raise_for_status()
 
-        output.parent.mkdir(parents=True, exist_ok=True)
-        with output.open("wb") as fh:
-            for chunk in response.iter_content(8192):
-                if chunk:
-                    fh.write(chunk)
-        return output
+        audio_chunks = bytearray()
+        for chunk in response.iter_content(8192):
+            if chunk:
+                audio_chunks.extend(chunk)
+        return bytes(audio_chunks)
 
 
     def prompt_for_persona(self, default: str | None) -> str | None:
