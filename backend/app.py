@@ -175,7 +175,7 @@ def _create_user_record(name: str, email: str, auth0_sub: str | None = None) -> 
     item = {
         PRIMARY_KEY: eta_id,
         "UploadDate": upload_date,
-        "Name": name,
+        "UsersName": name,
         "Email": email,
         "ChatHistory": [],
         "Context": [],
@@ -369,8 +369,8 @@ def sync_user():
         else:
             eta_id = item[PRIMARY_KEY]
             update_fields: dict[str, str] = {}
-            if name and name != item.get("Name"):
-                update_fields["Name"] = name
+            if name and name != item.get("UsersName"):
+                update_fields["UsersName"] = name
             if email and email != (item.get("Email") or "").lower():
                 update_fields["Email"] = email
             if auth0_sub and auth0_sub != item.get("Auth0Sub"):

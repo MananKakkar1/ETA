@@ -9,6 +9,6 @@ boto3>=1.24.28
 awscli>=1.27.0
 google-generativeai
 pypdf>=4.0.0
-
+PyPDF2>=3.0.0
 datetime>=4.3
 uuid>=1.30.0
