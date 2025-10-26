@@ -229,17 +229,36 @@ function ChatSidebar({ onSelectThread, personaLabel, isSpeaking }) {
   );
 }
 
-function MessageBubble({ role, content }) {
+function MessageBubble({ role, content, onClick }) {
   const isAgent = role === "assistant";
+  const isClickable =
+    isAgent && typeof onClick === "function" && typeof content === "string";
+
+  const handleKeyDown = (event) => {
+    if (!isClickable) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onClick();
+    }
+  };
+
   return (
-    <div className={`chat__bubble${isAgent ? " chat__bubble--agent" : ""}`}>
+    <div
+      className={`chat__bubble${
+        isAgent ? " chat__bubble--agent" : ""
+      }${isClickable ? " chat__bubble--clickable" : ""}`}
+      onClick={isClickable ? onClick : undefined}
+      onKeyDown={handleKeyDown}
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+    >
       <div className="chat__bubble-meta">{isAgent ? "ETA" : "You"}</div>
       <p>{content}</p>
     </div>
   );
 }
 
-function ChatMessages({ messages }) {
+function ChatMessages({ messages, onMessageClick }) {
   const listRef = useRef(null);
 
   useEffect(() => {
@@ -251,7 +270,15 @@ function ChatMessages({ messages }) {
   return (
     <div ref={listRef} className="chat__messages">
       {messages.map((message, index) => (
-        <MessageBubble key={`${message.role}-${index}`} {...message} />
+        <MessageBubble
+          key={`${message.role}-${index}`}
+          {...message}
+          onClick={
+            message.role === "assistant"
+              ? () => onMessageClick?.(message)
+              : undefined
+          }
+        />
       ))}
     </div>
   );
@@ -341,6 +368,76 @@ function AvatarPreview({ isSpeaking, personaLabel }) {
   );
 }
 
+function ExpandedMessageOverlay({ message, onClose }) {
+  useEffect(() => {
+    if (!message) return;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "unset";
+    };
+  }, [message, onClose]);
+
+  if (!message) return null;
+
+  const renderContent = () => {
+    if (typeof message.content !== "string") {
+      return <pre>{JSON.stringify(message.content, null, 2)}</pre>;
+    }
+
+    return message.content.split("\n").map((line, lineIndex) => {
+      if (!line.trim()) {
+        return <br key={`line-${lineIndex}`} />;
+      }
+
+      return (
+        <p key={`line-${lineIndex}`} className="message-overlay__paragraph">
+          {line}
+        </p>
+      );
+    });
+  };
+
+  return (
+    <div className="message-overlay" onClick={onClose}>
+      <div
+        className="message-overlay__panel"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="message-overlay__header">
+          <div>
+            <span className="message-overlay__label">Expanded Response</span>
+            <h2 className="message-overlay__title">Generated Notes</h2>
+          </div>
+          <button
+            type="button"
+            className="message-overlay__close"
+            onClick={onClose}
+            aria-label="Close expanded message"
+          >
+            ×
+          </button>
+        </div>
+        <div className="message-overlay__body">{renderContent()}</div>
+        <div className="message-overlay__footer">
+          <button type="button" className="cta cta--primary" onClick={onClose}>
+            Back to Chat
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Chat() {
   const [persona, setPersona] = useState("professor");
   const [input, setInput] = useState("");
@@ -353,6 +450,7 @@ function Chat() {
         "Welcome back! Ready to continue your session? Choose a topic or ask away.",
     },
   ]);
+  const [expandedMessage, setExpandedMessage] = useState(null);
 
   const personaDetails = useMemo(
     () => PERSONA_MAP[persona] ?? PERSONA_MAP["professor"],
@@ -392,8 +490,16 @@ function Chat() {
     );
   };
 
+  const handleMessageClick = (message) => {
+    setExpandedMessage(message);
+  };
+
+  const handleCloseExpandedMessage = () => {
+    setExpandedMessage(null);
+  };
+
   return (
-    <div className="chat">
+    <div className={`chat${expandedMessage ? " chat--overlay-active" : ""}`}>
       <ChatSidebar
         onSelectThread={(thread) => console.log("open", thread)}
         personaLabel={personaDetails.displayLabel}
@@ -414,7 +520,7 @@ function Chat() {
           <PersonaTabs activePersona={persona} onSelect={setPersona} />
         </header>
 
-        <ChatMessages messages={messages} />
+        <ChatMessages messages={messages} onMessageClick={handleMessageClick} />
 
         <Composer
           input={input}
@@ -423,6 +529,10 @@ function Chat() {
           disabled={false}
         />
       </section>
+      <ExpandedMessageOverlay
+        message={expandedMessage}
+        onClose={handleCloseExpandedMessage}
+      />
     </div>
   );
 }

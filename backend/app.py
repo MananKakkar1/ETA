@@ -215,11 +215,11 @@ def upload_context():
         summary_text = pdf_text
         try:
             prompt = (
-                "Provide a detailed yet concise summary that preserves every key "
-                "detail, definition, and enumerated point from the provided PDF "
+                "Provide a detailed yet concise summary that preserves every key " \
+                "detail, definition, and enumerated point from the provided PDF " \
                 "content. Make sure to include all important information without omitting any context." \
                 "Summarize in a manner that is concise and doesnt use any bullet points or decorative formatting. " \
-                "The summary should be in plain text format with no spaces or newlines."
+                "The summary should be in plain text format with no spaces or newlines." \
             )
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
