@@ -580,10 +580,9 @@ def generate_weekly_plan():
             messages = thread.get("Messages", [])
             for role, msg in messages:
                 history += f"{role}: {msg}\n"
-            context_string = ""
+            context_string = "\n\nContext:\n"
             for ctx in context:
                 context_string += f"{ctx.get('summary', '')}\n"
-            prompt += f"\n\nContext:\n{context_string}"
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=[
@@ -680,7 +679,36 @@ def get_voice_response() -> bytes:
     question = data.get("question")
     persona = data.get("persona")
     chat_id = request.form.get("chatId")
+    eta_id = request.form.get(PRIMARY_KEY)
+    if not all([eta_id, chat_id]):
+        return jsonify({"error": "Missing etaId or chat_id parameter"}), 400
+    response = table.query(
+        KeyConditionExpression=Key(PRIMARY_KEY).eq(eta_id),
+        ScanIndexForward=False,
+        Limit=1,
+    )
+    items = response.get("Items", [])
+    if not items:
+        return jsonify({"error": "User not found"}), 404
+    chat_history = items[0].get("ChatHistory", [])
+    context = items[0].get("Context", [])
+    if not chat_history or not context:
+        return jsonify({"error": "No chat history/context found for user"}), 404
+    thread = None
+    for t in chat_history:
+        if str(t.get("ChatID")) == chat_id:
+            thread = t
+            break
+    if not thread:
+        return jsonify({"error": "Chat thread not found"}), 404
     # TODO: Give all context before asking for a reply.
+    history = ""
+    messages = thread.get("Messages", [])
+    for role, msg in messages:
+        history += f"{role}: {msg}\n"
+    context_string = "\n\nContext:\n"
+    for ctx in context:
+        context_string += f"{ctx.get('summary', '')}\n"
     if not question or not persona:
         return jsonify({"error": "Missing question or persona"}), 400
     module = ElevenLabsModule()
