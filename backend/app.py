@@ -149,7 +149,8 @@ def generate_new_user():
             }
         )
 
-        status_code = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        status_code = response.get(
+            "ResponseMetadata", {}).get("HTTPStatusCode")
         if status_code != 200:
             return jsonify({"error": "Failed to store user"}), 500
 
@@ -191,6 +192,7 @@ def get_user(eta_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 @app.route("/upload-context", methods=["POST"])
 def upload_context():
     try:
@@ -230,7 +232,8 @@ def upload_context():
                 ],
             )
             candidate = response.candidates[0]
-            summary_text = "".join(part.text for part in candidate.content.parts).strip() or pdf_text
+            summary_text = "".join(
+                part.text for part in candidate.content.parts).strip() or pdf_text
         except Exception as exc:  # pragma: no cover - diagnostic
             debug.setdefault("summary_error", str(exc))
 
@@ -325,7 +328,8 @@ def create_chat_thread():
         data = request.get_json()
         # Assume that the etaID is already provided
         user_id = data.get(PRIMARY_KEY)
-        user = table.get_item(KeyConditionExpression=Key(PRIMARY_KEY).eq(user_id), Limit=1, ScanIndexForward=False)
+        user = table.get_item(KeyConditionExpression=Key(
+            PRIMARY_KEY).eq(user_id), Limit=1, ScanIndexForward=False)
         chats = user.get("Items", [])[0].get("ChatHistory", [])
         if not chats:
             return jsonify({"error": "No chat history found for user"}), 404
@@ -342,7 +346,8 @@ def create_chat_thread():
         return jsonify({"message": "Chat thread created successfully", "chat_id": new_thread['ChatID']}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
+
+
 @app.route("/thread/get_chat_thread/<chat_id>", methods=["GET"])
 def get_chat_thread(chat_id):
     try:
@@ -368,11 +373,188 @@ def get_chat_thread(chat_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# Queries user message to model, then asks model for assistant response and adds both to thread
+
+
 @app.route("/thread/add_message", methods=["POST"])
 def add_message_to_thread():
-    pass
+    try:
+        eta_id = request.form.get("etaId")
+        chat_id = request.form.get("chatId")
+        message = request.form.get("message")
+        if not all([eta_id, chat_id, message]):
+            return jsonify({"error": "Missing required fields"}), 400
+        response = table.query(
+            KeyConditionExpression=Key(PRIMARY_KEY).eq(eta_id),
+            ScanIndexForward=False,
+            Limit=1,
+        )
+        items = response.get("Items", [])
+        if not items:
+            return jsonify({"error": "User not found"}), 404
+        chat_history = items[0].get("ChatHistory", [])
+        if not chat_history:
+            return jsonify({"error": "No chat history found for user"}), 404
+        # Then get the assistant's response from the AI model
+        try:
+            prompt = ("You are an educational assistant. Respond to the user's message thoughtfully and helpfully."
+                      "Ensure your response is clear, concise, and informative, while maintaining a friendly and approachable tone.")
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    {
+                        "role": "user",
+                        "parts": [{"text": prompt,
+                                   "text": message}],
+                    }
+                ],
+            )
+            candidate = response.candidates[0]
+            assistant_message = "".join(
+                part.text for part in candidate.content.parts).strip()
+        except Exception as exc:
+            assistant_message = "I'm sorry, I couldn't process your request at the moment."
+        for thread in chat_history:
+            if str(thread.get("ChatID")) == chat_id:
+                thread['User'].append({
+                    "message": message,
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                })
+                thread['Assistant'].append({
+                    "message": assistant_message,
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                })
+                break
+        else:
+            return jsonify({"error": "Chat thread not found"}), 404
+
+        table.update_item(
+            Key={
+                PRIMARY_KEY: eta_id,
+                'UploadDate': items[0].get("UploadDate"),
+            },
+            UpdateExpression="SET ChatHistory = :chats",
+            ExpressionAttributeValues={":chats": chat_history}
+        )
+        return jsonify({"message": "Message added successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
+@app.route("/generate-practice-problems", methods=["POST"])
+def generate_practice_problems():
+    try:
+        eta_id = request.form.get("etaId")
+        chat_id = request.form.get("chatId")
+        message = request.form.get("message")
+
+        if not all([eta_id, chat_id]):
+            return jsonify({"error": "Missing required fields"}), 400
+        response = table.query(
+            KeyConditionExpression=Key(PRIMARY_KEY).eq(eta_id),
+            ScanIndexForward=False,
+            Limit=1,
+        )
+        items = response.get("Items", [])
+        if not items:
+            return jsonify({"error": "User not found"}), 404
+        chat_history = items[0].get("ChatHistory", [])
+        context = items[0].get("Context", [])
+        if not chat_history or not context:
+            return jsonify({"error": "No chat history found for user"}), 404
+        # Then get the assistant's response from the AI model
+        try:
+            prompt = ("You are an educational assistant. Respond to the user's message thoughtfully and helpfully."
+                      "Given the current chat history and the context, generate problems based on the context that will give the user a light challenge to enhance their learning.")
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    {
+                        "role": "user",
+                        "parts": [{"text": prompt,
+                                   "text": message}],
+                    }
+                ],
+            )
+            candidate = response.candidates[0]
+            assistant_message = "".join(
+                part.text for part in candidate.content.parts).strip()
+        except Exception as exc:
+            assistant_message = "I'm sorry, I couldn't process your request at the moment."
+        for thread in chat_history:
+            if str(thread.get("ChatID")) == chat_id:
+                thread['User'].append({
+                    "message": message,
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                })
+                thread['Assistant'].append({
+                    "message": assistant_message,
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                })
+                break
+        else:
+            return jsonify({"error": "Chat thread not found"}), 404
+
+        table.update_item(
+            Key={
+                PRIMARY_KEY: eta_id,
+                'UploadDate': items[0].get("UploadDate"),
+            },
+            UpdateExpression="SET ChatHistory = :chats",
+            ExpressionAttributeValues={":chats": chat_history}
+        )
+        return jsonify({"message": "Message added successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    except Exception as exc:
+        return jsonify({"error"})
+
+
+@app.route("/generate-weekly-plan", methods=["POST"])
+def generate_weekly_plan():
+    try:
+        eta_id = request.form.get("etaId")
+        chat_id = request.form.get("chatId")
+        if not all([eta_id, chat_id]):
+            return jsonify({"error": "Missing required fields"}), 400
+        response = table.query(
+            KeyConditionExpression=Key(PRIMARY_KEY).eq(eta_id),
+            ScanIndexForward=False,
+            Limit=1,
+        )
+        items = response.get("Items", [])
+        if not items:
+            return jsonify({"error": "User not found"}), 404
+        chat_history = items[0].get("ChatHistory", [])
+        context = items[0].get("Context", [])
+        if not chat_history or not context:
+            return jsonify({"error": "No chat history/context found for user"}), 404
+        thread = None
+        for t in chat_history:
+            if str(t.get("ChatID")) == chat_id:
+                thread = t
+                break
+        if not thread:
+            return jsonify({"error": "Chat thread not found"}), 404
+        # Then get the assistant's response from the AI model
+        try:
+            prompt = ("You are an educational assistant. Based on the user's context, generate a detailed weekly study plan to help them effectively learn the material. "
+                      "Break down the content into manageable sections and suggest daily study goals, including time allocations and key focus areas."
+                      "Ensure that the plan is realistic and adaptable to the user's schedule, and ensure that the plan remains clear and concise, without losing details.")
+            history = ""
+            for u, a in zip(thread['User'], thread['Assistant']):
+                history += f"User: {u['message']}\nAssistant: {a['message']}\n"
+
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    {
+                        "text": prompt,
+                        "text": chat_history
+                    }
+                ]
+            )
 
 
 if __name__ == "__main__":
