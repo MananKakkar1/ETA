@@ -48,6 +48,7 @@ export function Avatar({ isSpeaking = false, externalRef, ...props }) {
 
   const { actions } = useAnimations(clips, group);
   const [currentAnimation, setCurrentAnimation] = useState(DEFAULT_ANIMATION);
+  const lastActionRef = useRef();
 
   useEffect(() => {
     // Only switch to talking if we're currently idle.
@@ -69,17 +70,33 @@ export function Avatar({ isSpeaking = false, externalRef, ...props }) {
       actions?.[currentAnimation] || actions?.[DEFAULT_ANIMATION];
     if (!action) return;
 
-    // reset, set looping for idle, then play
-    action.reset();
+    const previous = lastActionRef.current;
+    if (previous === action) {
+      return;
+    }
+
+    action.enabled = true;
     if (currentAnimation === DEFAULT_ANIMATION) {
       action.setLoop(LoopRepeat, Infinity);
     } else {
-      // non-idle animations should play once (adjust as needed)
       action.setLoop(LoopOnce, 0);
     }
-    action.fadeIn(0.4).play();
 
-    return () => action.fadeOut(0.2);
+    action.reset();
+    action.play();
+
+    if (previous && previous !== action) {
+      previous.enabled = true;
+      previous.crossFadeTo(action, 0.35, true);
+    }
+
+    lastActionRef.current = action;
+
+    return () => {
+      if (action === lastActionRef.current) {
+        action.fadeOut(0.25);
+      }
+    };
   }, [actions, currentAnimation]);
 
   // keep internal ref and also forward it to externalRef if provided

@@ -318,4 +318,19 @@ export async function requestVoiceResponse({
   return { audio, animation: response.headers.get('x-animation') || null };
 }
 
+export async function uploadContext({ etaId, file }) {
+  if (!etaId || !file) {
+    throw new Error('etaId and file are required for context upload.');
+  }
+
+  const form = new FormData();
+  form.append('file', file);
+  form.append('etaId', etaId);
+
+  return request('/upload-context', {
+    method: 'POST',
+    body: form,
+  });
+}
+
 export { STORAGE_KEYS };

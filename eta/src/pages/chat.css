@@ -533,6 +533,7 @@
   border-radius: 1rem;
   background: rgba(244, 247, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  width: 100%;
 }
 
 .chat__voice-fallback audio {

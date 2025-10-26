@@ -13,6 +13,7 @@ import {
   generateNotes as apiGenerateNotes,
   generatePracticeProblems as apiGeneratePracticeProblems,
   requestVoiceResponse as apiRequestVoiceResponse,
+  uploadContext as apiUploadContext,
   storeEtaId,
   getStoredEtaId,
 } from '../lib/api.js';
@@ -333,8 +334,11 @@ function Composer({
   onPrimaryAction,
   selectedAction,
   onSelectAction,
+  onUploadContext,
   inputDisabled,
   actionDisabled,
+  uploadDisabled,
+  uploadLabel,
   primaryDisabled,
   primaryLabel,
 }) {
@@ -402,6 +406,14 @@ function Composer({
             <span>Voice Reply</span>
           </label>
         </fieldset>
+        <button
+          type="button"
+          className="cta cta--ghost"
+          onClick={onUploadContext}
+          disabled={uploadDisabled}
+        >
+          {uploadLabel}
+        </button>
         <button
           className="cta cta--primary"
           type="button"
@@ -665,6 +677,7 @@ function Chat() {
   const speakingTimerRef = useRef(null);
   const audioRef = useRef(null);
   const voiceCleanupRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [etaProfile, setEtaProfile] = useState(null);
   const [threads, setThreads] = useState([]);
   const [activeThreadId, setActiveThreadId] = useState(null);
@@ -676,6 +689,7 @@ function Chat() {
   const [isGeneratingNotes, setIsGeneratingNotes] = useState(false);
   const [isGeneratingPractice, setIsGeneratingPractice] = useState(false);
   const [isRequestingVoice, setIsRequestingVoice] = useState(false);
+  const [isUploadingContext, setIsUploadingContext] = useState(false);
   const [errorNotice, setErrorNotice] = useState('');
   const ensuredInitialThreadRef = useRef(false);
   const [selectedAction, setSelectedAction] = useState('send');
@@ -1034,6 +1048,14 @@ function Chat() {
   }, []);
 
   const clearVoiceFallback = useCallback(() => {
+    if (voiceCleanupRef.current) {
+      try {
+        voiceCleanupRef.current();
+      } catch {
+        /* ignore */
+      }
+      voiceCleanupRef.current = null;
+    }
     if (voiceFallback?.release) {
       try {
         voiceFallback.release();
@@ -1043,10 +1065,77 @@ function Chat() {
     }
     setVoiceFallback(null);
     setIsAvatarSpeaking(false);
-    if (voiceCleanupRef.current) {
-      voiceCleanupRef.current = null;
-    }
   }, [voiceFallback]);
+
+  const handleVoiceFallbackPlay = useCallback(
+    (event) => {
+      const element = event.currentTarget;
+      audioRef.current = element;
+      setIsAvatarSpeaking(true);
+      voiceCleanupRef.current = () => {
+        try {
+          element.pause();
+          element.currentTime = 0;
+        } catch {
+          /* ignore */
+        }
+        audioRef.current = null;
+        if (voiceFallback?.release) {
+          voiceFallback.release();
+        }
+        setVoiceFallback(null);
+      };
+    },
+    [voiceFallback]
+  );
+
+  const handleUploadContext = useCallback(() => {
+    if (!etaProfile?.etaId || isUploadingContext) {
+      if (!etaProfile?.etaId) {
+        setErrorNotice('Please sign in before uploading context.');
+      }
+      return;
+    }
+    fileInputRef.current?.click();
+  }, [etaProfile?.etaId, isUploadingContext]);
+
+  const handleContextFileChange = useCallback(
+    async (event) => {
+      const inputEl = event.target;
+      const file = inputEl?.files?.[0];
+      if (!file) return;
+      if (!etaProfile?.etaId) {
+        setErrorNotice('Please sign in before uploading context.');
+        if (inputEl) {
+          inputEl.value = '';
+        }
+        return;
+      }
+
+      setIsUploadingContext(true);
+      try {
+        await apiUploadContext({ etaId: etaProfile.etaId, file });
+        setErrorNotice('');
+        setExpandedMessage({
+          role: 'assistant',
+          content:
+            'Context uploaded successfully. Future responses will incorporate the new material.',
+        });
+      } catch (error) {
+        console.error('Failed to upload context', error);
+        setErrorNotice(
+          error.message || 'Context upload failed. Please try again.'
+        );
+      } finally {
+        setIsUploadingContext(false);
+        if (inputEl) {
+          // allow the same file to be selected again
+          inputEl.value = '';
+        }
+      }
+    },
+    [etaProfile?.etaId]
+  );
 
   const handleGenerateNotes = useCallback(async () => {
     if (!etaProfile?.etaId || isGeneratingNotes) {
@@ -1094,7 +1183,6 @@ function Chat() {
           content: response.notes,
         });
       }
-      setSelectedAction('send');
     } catch (error) {
       console.error('Failed to generate notes', error);
       setErrorNotice(
@@ -1108,7 +1196,6 @@ function Chat() {
     isGeneratingNotes,
     ensureThreadId,
     applyThreadUpdate,
-    setSelectedAction,
   ]);
 
   const handleGeneratePractice = useCallback(async () => {
@@ -1161,7 +1248,6 @@ function Chat() {
           content: response.practice_problems,
         });
       }
-      setSelectedAction('send');
     } catch (error) {
       console.error('Failed to generate practice problems', error);
       setErrorNotice(
@@ -1176,7 +1262,6 @@ function Chat() {
     trimmedInput,
     ensureThreadId,
     applyThreadUpdate,
-    setSelectedAction,
   ]);
 
   const handleVoiceResponse = useCallback(async () => {
@@ -1188,6 +1273,8 @@ function Chat() {
       setErrorNotice('Please enter a question to request a voice response.');
       return;
     }
+    clearVoiceFallback();
+
     const targetThreadId = await ensureThreadId();
     if (!targetThreadId) {
       setErrorNotice(
@@ -1225,81 +1312,24 @@ function Chat() {
         )
       );
 
-      if (voiceCleanupRef.current) {
-        voiceCleanupRef.current();
-      }
-      if (voiceFallback?.release) {
-        try {
-          voiceFallback.release();
-        } catch {
-          /* ignore */
-        }
-        setVoiceFallback(null);
-      }
-
       const blob = new Blob([audio], { type: 'audio/mpeg' });
       const audioUrl = URL.createObjectURL(blob);
-      const audioElement = new Audio(audioUrl);
-      audioRef.current = audioElement;
-
-      const cleanupPlayback = ({ revoke = true } = {}) => {
-        audioElement.onended = null;
-        audioElement.onerror = null;
+      const release = () => {
         try {
-          audioElement.pause();
-          audioElement.currentTime = 0;
+          URL.revokeObjectURL(audioUrl);
         } catch {
           /* ignore */
         }
-        if (audioRef.current === audioElement) {
-          audioRef.current = null;
-        }
-        if (revoke) {
-          try {
-            URL.revokeObjectURL(audioUrl);
-          } catch {
-            /* ignore */
-          }
-        }
-        voiceCleanupRef.current = null;
         setIsAvatarSpeaking(false);
       };
 
-      voiceCleanupRef.current = () => cleanupPlayback({ revoke: true });
-
-      audioElement.onended = () => cleanupPlayback({ revoke: true });
-      audioElement.onerror = () => cleanupPlayback({ revoke: true });
-
-      audioElement
-        .play()
-        .then(() => {
-          setIsAvatarSpeaking(true);
-          setExpandedMessage(null);
-          setSelectedAction('send');
-        })
-        .catch((playError) => {
-          console.warn('Unable to play voice response automatically', playError);
-          cleanupPlayback({ revoke: false });
-          const release = () => {
-            try {
-              URL.revokeObjectURL(audioUrl);
-            } catch {
-              /* ignore */
-            }
-          };
-          setVoiceFallback({ audioUrl, release });
-          voiceCleanupRef.current = () => {
-            release();
-            setVoiceFallback(null);
-          };
-          const message =
-            'Voice ready. Press play below to listen (browser blocked auto audio).';
-          setExpandedMessage({
-            role: 'assistant',
-            content: message,
-          });
-          setSelectedAction('voice');
-        });
+      setVoiceFallback({ audioUrl, release });
+      voiceCleanupRef.current = null;
+      setSelectedAction('voice');
+      setExpandedMessage({
+        role: 'assistant',
+        content: 'Voice ready. Press play below to listen.',
+      });
     } catch (error) {
       console.error('Failed to generate voice response', error);
       setErrorNotice(
@@ -1315,7 +1345,7 @@ function Chat() {
     ensureThreadId,
     persona,
     setSelectedAction,
-    voiceFallback,
+    clearVoiceFallback,
   ]);
 
   useEffect(
@@ -1323,8 +1353,15 @@ function Chat() {
       if (voiceCleanupRef.current) {
         voiceCleanupRef.current();
       }
+      if (voiceFallback?.release) {
+        try {
+          voiceFallback.release();
+        } catch {
+          /* ignore */
+        }
+      }
     },
-    []
+    [voiceFallback]
   );
 
   const isMessagesLoading =
@@ -1349,17 +1386,24 @@ function Chat() {
     !!etaProfile?.etaId &&
     trimmedInput.length > 0;
 
+  const uploadDisabled =
+    !etaProfile?.etaId || isUploadingContext || inputDisabled;
+  const uploadLabel = isUploadingContext ? 'Uploading…' : 'Upload PDF Context';
+
   const primaryDisabled =
-    selectedAction === 'notes'
+    (selectedAction === 'voice' && voiceFallback) ||
+    (selectedAction === 'notes'
       ? !canGenerateNotes
       : selectedAction === 'practice'
       ? !canGeneratePractice
       : selectedAction === 'voice'
       ? !canVoice
-      : !canSend;
+      : !canSend);
 
   const primaryLabel =
-    selectedAction === 'notes'
+    selectedAction === 'voice' && voiceFallback
+      ? 'Voice Ready'
+      : selectedAction === 'notes'
       ? isGeneratingNotes
         ? 'Generating Notes…'
         : 'Generate Notes'
@@ -1439,12 +1483,20 @@ function Chat() {
           onMessageClick={handleMessageClick}
         />
 
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf"
+          hidden
+          onChange={handleContextFileChange}
+        />
+
         {voiceFallback ? (
           <div className="chat__voice-fallback">
             <audio
               controls
               src={voiceFallback.audioUrl}
-              onPlay={() => setIsAvatarSpeaking(true)}
+              onPlay={handleVoiceFallbackPlay}
               onPause={() => setIsAvatarSpeaking(false)}
               onEnded={clearVoiceFallback}
             />
@@ -1464,8 +1516,11 @@ function Chat() {
           onPrimaryAction={handlePrimaryAction}
           selectedAction={selectedAction}
           onSelectAction={setSelectedAction}
+          onUploadContext={handleUploadContext}
           inputDisabled={inputDisabled}
           actionDisabled={actionDisabled}
+          uploadDisabled={uploadDisabled}
+          uploadLabel={uploadLabel}
           primaryDisabled={primaryDisabled}
           primaryLabel={primaryLabel}
         />
