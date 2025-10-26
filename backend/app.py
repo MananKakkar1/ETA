@@ -143,7 +143,7 @@ def generate_new_user():
                 'UploadDate': upload_date,
                 'Name': name,
                 'Email': email,
-                'ChatHistory': [{'User': [], 'Assistant': []}],
+                'ChatHistory': [],
                 'Context': [],
                 'Uploads': [],
             }
@@ -317,6 +317,63 @@ def get_context(eta_id):
         return jsonify({"context": context}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/thread/create_chat_thread", methods=["POST"])
+def create_chat_thread():
+    try:
+        data = request.get_json()
+        # Assume that the etaID is already provided
+        user_id = data.get(PRIMARY_KEY)
+        user = table.get_item(KeyConditionExpression=Key(PRIMARY_KEY).eq(user_id), Limit=1, ScanIndexForward=False)
+        chats = user.get("Items", [])[0].get("ChatHistory", [])
+        if not chats:
+            return jsonify({"error": "No chat history found for user"}), 404
+        new_thread = {'ChatID': len(chats), 'User': [], 'Assistant': []}
+        chats.append(new_thread)
+        table.update_item(
+            Key={
+                PRIMARY_KEY: user_id,
+                'UploadDate': user.get("Items", [])[0].get("UploadDate"),
+            },
+            UpdateExpression="SET ChatHistory = :chats",
+            ExpressionAttributeValues={":chats": chats}
+        )
+        return jsonify({"message": "Chat thread created successfully", "chat_id": new_thread['ChatID']}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@app.route("/thread/get_chat_thread/<chat_id>", methods=["GET"])
+def get_chat_thread(chat_id):
+    try:
+        eta_id = request.args.get("etaId")
+        if not eta_id:
+            return jsonify({"error": "Missing etaId parameter"}), 400
+
+        response = table.query(
+            KeyConditionExpression=Key(PRIMARY_KEY).eq(eta_id),
+            ScanIndexForward=False,
+            Limit=1,
+        )
+        items = response.get("Items", [])
+        if not items:
+            return jsonify({"error": "User not found"}), 404
+
+        chat_history = items[0].get("ChatHistory", [])
+        for thread in chat_history:
+            if str(thread.get("ChatID")) == chat_id:
+                return jsonify({"chat_thread": thread}), 200
+
+        return jsonify({"error": "Chat thread not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/thread/add_message", methods=["POST"])
+def add_message_to_thread():
+    pass
+
+
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(env.get("PORT", 3000)))
