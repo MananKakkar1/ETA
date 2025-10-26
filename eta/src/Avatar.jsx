@@ -1,4 +1,4 @@
-import { use, useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useGLTF, useFBX, useAnimations } from "@react-three/drei";
 import { LoopRepeat, LoopOnce } from "three";
 
@@ -88,7 +88,7 @@ export function Avatar({ isSpeaking = false, externalRef, ...props }) {
     if (externalRef) {
       try {
         externalRef.current = el;
-      } catch (e) {
+      } catch {
         // ignore if externalRef is not a mutable ref
       }
     }

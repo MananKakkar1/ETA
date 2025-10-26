@@ -209,6 +209,24 @@
   background: rgba(244, 247, 255, 0.12);
 }
 
+.cta--ghost {
+  background: transparent;
+  border: 1px solid rgba(244, 247, 255, 0.18);
+  color: var(--color-text-primary);
+  padding: 0.7rem 1.4rem;
+}
+
+.cta--ghost:hover {
+  background: rgba(244, 247, 255, 0.1);
+}
+
+.cta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .route-loading {
   display: flex;
   align-items: center;
