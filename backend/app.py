@@ -217,19 +217,11 @@ def upload_context():
         summary_text = pdf_text
         try:
             prompt = (
-<<<<<<< HEAD
                 "Provide a detailed yet concise summary that preserves every key "
                 "detail, definition, and enumerated point from the provided PDF "
                 "content. Make sure to include all important information without omitting any context."
                 "Summarize in a manner that is concise and doesnt use any bullet points or decorative formatting. "
                 "The summary should be in plain text format with no spaces or newlines."
-=======
-                "Provide a detailed yet concise summary that preserves every key " \
-                "detail, definition, and enumerated point from the provided PDF " \
-                "content. Make sure to include all important information without omitting any context." \
-                "Summarize in a manner that is concise and doesnt use any bullet points or decorative formatting. " \
-                "The summary should be in plain text format with no spaces or newlines." \
->>>>>>> 6ea9aad7c7eb6821b859d12e39da62dcde56e5b8
             )
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
@@ -360,10 +352,12 @@ def create_chat_thread():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/thread/get_chat_thread/<chat_id>", methods=["GET"])
-def get_chat_thread(chat_id):
+@app.route("/thread/get_chat_thread/", methods=["GET"])
+def get_chat_thread():
     try:
-        eta_id = request.args.get("etaId")
+        data = request.get_json()
+        eta_id = data.get(PRIMARY_KEY)
+        chat_id = data.get("chatID")
         if not eta_id:
             return jsonify({"error": "Missing etaId parameter"}), 400
 
@@ -391,9 +385,10 @@ def get_chat_thread(chat_id):
 @app.route("/thread/add_message", methods=["POST"])
 def add_message_to_thread():
     try:
-        eta_id = request.form.get("etaId")
-        chat_id = request.form.get("chatId")
-        message = request.form.get("message")
+        data = request.get_json()
+        eta_id = data.get(PRIMARY_KEY)
+        chat_id = data.get("chatID")
+        message = data.get("message")
         if not all([eta_id, chat_id, message]):
             return jsonify({"error": "Missing required fields"}), 400
         response = table.query(
@@ -407,7 +402,45 @@ def add_message_to_thread():
         chat_history = items[0].get("ChatHistory", [])
         if not chat_history:
             return jsonify({"error": "No chat history found for user"}), 404
-        # Then get the assistant's response from the AI model
+        for thread in chat_history:
+            if str(thread.get("ChatID")) == chat_id:
+                thread.append(('User', message))
+                break
+        if len(thread) > 20:
+            thread = thread[-20:]
+        table.update_item(
+            Key={
+                PRIMARY_KEY: eta_id,
+                'UploadDate': items[0].get("UploadDate"),
+            },
+            UpdateExpression="SET ChatHistory = :chats",
+            ExpressionAttributeValues={":chats": chat_history}
+        )
+        return jsonify({"message": "Message added successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/thread/generate_ai_response", methods=["POST"])
+def generate_ai_response(eta_id, chat_id, message, chat_history, items):
+    try:
+        data = request.get_json()
+        eta_id = data.get(PRIMARY_KEY)
+        chat_id = data.get("chatID")
+        message = data.get("message")
+        if not all([eta_id, chat_id, message]):
+            return jsonify({"error": "Missing required fields"}), 400
+        response = table.query(
+            KeyConditionExpression=Key(PRIMARY_KEY).eq(eta_id),
+            ScanIndexForward=False,
+            Limit=1,
+        )
+        items = response.get("Items", [])
+        if not items:
+            return jsonify({"error": "User not found"}), 404
+        chat_history = items[0].get("ChatHistory", [])
+        if not chat_history:
+            return jsonify({"error": "No chat history found for user"}), 404
         try:
             prompt = ("You are an educational assistant. Respond to the user's message thoughtfully and helpfully."
                       "Ensure your response is clear, concise, and informative, while maintaining a friendly and approachable tone.")
@@ -433,9 +466,6 @@ def add_message_to_thread():
                 break
         if len(thread) > 20:
             thread = thread[-20:]
-        else:
-            return jsonify({"error": "Chat thread not found"}), 404
-
         table.update_item(
             Key={
                 PRIMARY_KEY: eta_id,
@@ -456,7 +486,6 @@ def generate_practice_problems():
         chat_id = request.form.get("chatId")
         message = request.form.get("message")
 
-<<<<<<< HEAD
         if not all([eta_id, chat_id]):
             return jsonify({"error": "Missing required fields"}), 400
         response = table.query(
@@ -585,36 +614,87 @@ def generate_weekly_plan():
         return jsonify({"error": str(e)}), 500
 
 
-def get_voice_response(voice_id: str, question: str, persona: str) -> bytes:
-    api_key = env.get("ELEVENLABS_API_KEY")
-=======
+@app.route("/generate-notes", methods=["POST"])
+def generate_notes():
+    eta_id = request.form.get("etaId")
+    chat_id = request.form.get("chatId")
+    try:
+        if not eta_id or not chat_id:
+            return jsonify({"error": "Missing etaId or chat_id parameter"}), 400
+
+        # Query the user's chat history
+        response = table.query(
+            KeyConditionExpression=Key(PRIMARY_KEY).eq(eta_id),
+            ScanIndexForward=False,
+            Limit=1,
+        )
+        items = response.get("Items", [])
+        if not items:
+            return jsonify({"error": "User not found"}), 404
+
+        chat_history = items[0].get("ChatHistory", [])
+        chat_thread = None
+        for thread in chat_history:
+            if str(thread.get("ChatID")) == chat_id:
+                chat_thread = thread
+                break
+
+        if not chat_thread:
+            return jsonify({"error": "Chat thread not found"}), 404
+
+        # Combine user and assistant messages
+        all_messages = []
+        for user_msg, assistant_msg in zip(
+            chat_thread.get("User", []),
+            chat_thread.get("Assistant", [])
+        ):
+            all_messages.append(f"User: {user_msg}")
+            all_messages.append(f"Assistant: {assistant_msg}")
+
+        if not all_messages:
+            return jsonify({"error": "No messages found in chat thread"}), 404
+
+        notes = " ".join(all_messages)
+        summary = notes[:1000]
+        chat_thread["Notes"] = summary
+        table.update_item(
+            Key={
+                PRIMARY_KEY: eta_id,
+                "UploadDate": items[0].get("UploadDate"),
+            },
+            UpdateExpression="SET ChatHistory = :chats",
+            ExpressionAttributeValues={":chats": chat_history},
+        )
+
+        return jsonify({
+            "message": "Notes generated successfully",
+            "notes": summary
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/voice-response", methods=["POST"])
 def get_voice_response() -> bytes:
     data = request.get_json()
     question = data.get("question")
     persona = data.get("persona")
+    chat_id = request.form.get("chatId")
     # TODO: Give all context before asking for a reply.
     if not question or not persona:
         return jsonify({"error": "Missing question or persona"}), 400
->>>>>>> 6ea9aad7c7eb6821b859d12e39da62dcde56e5b8
     module = ElevenLabsModule()
     module.load_env()
-    env = Path(__file__).with_name(".env")
-    if env.exists():
-        load_dotenv(env)
-<<<<<<< HEAD
-    module.resolve_persona(persona, os.getenv(
-        "SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
-    module.gemini_reply(question, system_prompt="You are a helpful assistant.")
-    module.elevenlabs_speech(question, output=Path(
-        "output.mp3"), voice_id=voice_id)
-=======
-    personaPrompt, personaResolved = module.resolve_persona(persona, os.getenv("SYSTEM_PROMPT"))
+    # env = Path(file).with_name(".env")
+    # if env.exists():
+    #     load_dotenv(env)
+    personaPrompt, personaResolved = module.resolve_persona(
+        persona, os.getenv("SYSTEM_PROMPT"))
     ans = module.gemini_reply(question, system_prompt=personaPrompt)
     animation = module.gemini_reply_emotion(ans)
-    voiceBytes = module.elevenlabs_speech(ans, output=Path("output.mp3"), voice_id=personaResolved)
+    voiceBytes = module.elevenlabs_speech(
+        ans, output=Path("output.mp3"), voice_id=personaResolved)
     return voiceBytes, animation
->>>>>>> 6ea9aad7c7eb6821b859d12e39da62dcde56e5b8
 
 
 if __name__ == "__main__":
