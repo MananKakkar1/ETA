@@ -378,17 +378,23 @@ def add_message_to_thread():
 
 
 
-
-def get_voice_response(voice_id: str, question: str, persona: str) -> bytes:
-    api_key = env.get("ELEVENLABS_API_KEY")
+@app.route("/voice-response", methods=["POST"])
+def get_voice_response() -> bytes:
+    data = request.get_json()
+    question = data.get("question")
+    persona = data.get("persona")
+    if not question or not persona:
+        return jsonify({"error": "Missing question or persona"}), 400
     module = ElevenLabsModule()
     module.load_env()
     env = Path(__file__).with_name(".env")
     if env.exists():
         load_dotenv(env)
-    module.resolve_persona(persona, os.getenv("SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
-    module.gemini_reply(question, system_prompt="You are a helpful assistant.")
-    module.elevenlabs_speech(question, output=Path("output.mp3"), voice_id=voice_id)
+    personaPrompt, personaResolved = module.resolve_persona(persona, os.getenv("SYSTEM_PROMPT"))
+    ans = module.gemini_reply(question, system_prompt=personaPrompt)
+    voiceBytes = module.elevenlabs_speech(ans, output=Path("output.mp3"), voice_id=personaResolved)
+    return voiceBytes
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(env.get("PORT", 3000)))
