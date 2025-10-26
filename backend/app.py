@@ -217,11 +217,19 @@ def upload_context():
         summary_text = pdf_text
         try:
             prompt = (
+<<<<<<< HEAD
                 "Provide a detailed yet concise summary that preserves every key "
                 "detail, definition, and enumerated point from the provided PDF "
                 "content. Make sure to include all important information without omitting any context."
                 "Summarize in a manner that is concise and doesnt use any bullet points or decorative formatting. "
                 "The summary should be in plain text format with no spaces or newlines."
+=======
+                "Provide a detailed yet concise summary that preserves every key " \
+                "detail, definition, and enumerated point from the provided PDF " \
+                "content. Make sure to include all important information without omitting any context." \
+                "Summarize in a manner that is concise and doesnt use any bullet points or decorative formatting. " \
+                "The summary should be in plain text format with no spaces or newlines." \
+>>>>>>> 6ea9aad7c7eb6821b859d12e39da62dcde56e5b8
             )
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
@@ -448,6 +456,7 @@ def generate_practice_problems():
         chat_id = request.form.get("chatId")
         message = request.form.get("message")
 
+<<<<<<< HEAD
         if not all([eta_id, chat_id]):
             return jsonify({"error": "Missing required fields"}), 400
         response = table.query(
@@ -578,16 +587,34 @@ def generate_weekly_plan():
 
 def get_voice_response(voice_id: str, question: str, persona: str) -> bytes:
     api_key = env.get("ELEVENLABS_API_KEY")
+=======
+@app.route("/voice-response", methods=["POST"])
+def get_voice_response() -> bytes:
+    data = request.get_json()
+    question = data.get("question")
+    persona = data.get("persona")
+    # TODO: Give all context before asking for a reply.
+    if not question or not persona:
+        return jsonify({"error": "Missing question or persona"}), 400
+>>>>>>> 6ea9aad7c7eb6821b859d12e39da62dcde56e5b8
     module = ElevenLabsModule()
     module.load_env()
     env = Path(__file__).with_name(".env")
     if env.exists():
         load_dotenv(env)
+<<<<<<< HEAD
     module.resolve_persona(persona, os.getenv(
         "SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT))
     module.gemini_reply(question, system_prompt="You are a helpful assistant.")
     module.elevenlabs_speech(question, output=Path(
         "output.mp3"), voice_id=voice_id)
+=======
+    personaPrompt, personaResolved = module.resolve_persona(persona, os.getenv("SYSTEM_PROMPT"))
+    ans = module.gemini_reply(question, system_prompt=personaPrompt)
+    animation = module.gemini_reply_emotion(ans)
+    voiceBytes = module.elevenlabs_speech(ans, output=Path("output.mp3"), voice_id=personaResolved)
+    return voiceBytes, animation
+>>>>>>> 6ea9aad7c7eb6821b859d12e39da62dcde56e5b8
 
 
 if __name__ == "__main__":
