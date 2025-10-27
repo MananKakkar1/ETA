@@ -203,8 +203,3 @@ All chat-related endpoints expect `PRIMARY_KEY`/`eta_id` plus a DynamoDB `chatID
 - **Auth0 login loops** – ensure `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, and the callback URL match your Auth0 application settings.
 - **DynamoDB access denied** – set AWS credentials and region before launching the API, or attach an IAM role with DynamoDB permissions when deploying.
 
----
-
-## License
-
-This project is provided under the MIT License. See the `LICENSE` file if present or add one before distributing.
